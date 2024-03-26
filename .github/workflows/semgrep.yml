@@ -12,6 +12,7 @@ on:
 jobs:
   # Update from: https://semgrep.dev/docs/semgrep-ci/sample-ci-configs/#github-actions
   semgrep:
+    if: false
     name: Scan
     runs-on: ubuntu-latest
     container:

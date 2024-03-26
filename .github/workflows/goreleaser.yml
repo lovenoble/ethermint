@@ -6,6 +6,7 @@ on:
       - "v*.*.*"
 jobs:
   goreleaser:
+    if: false
     runs-on: ubuntu-latest
     environment: release
     steps:
