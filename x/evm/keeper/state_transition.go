@@ -18,6 +18,9 @@ package keeper
 import (
 	"fmt"
 	"math/big"
+	"net"
+	"net/http"
+	"net/rpc"
 
 	cmttypes "github.com/cometbft/cometbft/types"
 
@@ -321,7 +324,47 @@ func (k *Keeper) ApplyMessageWithConfig(
 			return nil, errorsmod.Wrap(err, "failed to apply state override")
 		}
 	}
+
 	evm := k.NewEVM(ctx, msg, cfg, stateDB)
+	// TODO Think about whether the RPC server should be persistent or ephemeral
+	//  - If it's persistent, we need to handle the lifecycle of the RPC server
+	//  - If it's ephemeral, we need to create a new RPC server for each message
+	//  - The current implementation is ephemeral
+	rpcSrv := keeperRpcServer{
+		ctx:    ctx,
+		msg:    msg,
+		evmCfg: cfg,
+		k:      k,
+	}
+	rpc.Register(rpcSrv)
+	rpc.HandleHTTP()
+	l, e := net.Listen("tcp", ":90090")
+	if e != nil {
+		return nil, e
+	}
+	http.Serve(l, nil)
+	defer l.Close()
+
+	// Send the PrepareTx RPC call to the SGX binary.
+	args := PrepareTxArgs{
+		BlockContext: PrepareTxBlockContext{
+			BlockHeight:   ctx.BlockHeight(),
+			BlockGasLimit: ethermint.BlockGasLimit(ctx),
+			BlockTime:     ctx.BlockTime().Unix(),
+		},
+		Msg:       msg,
+		EvmConfig: *cfg,
+	}
+	client, err := rpc.DialHTTP("tcp", "localhost"+":90091")
+	if err != nil {
+		return nil, err
+	}
+	var reply PrepareTxReply
+	err = client.Call("SgxServer.PrepareTx", args, &reply)
+	if err != nil {
+		return nil, err
+	}
+
 	leftoverGas := msg.GasLimit
 	sender := vm.AccountRef(msg.From)
 	// Allow the tracer captures the tx level events, mainly the gas consumption.
