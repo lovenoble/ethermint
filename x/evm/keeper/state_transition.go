@@ -47,7 +47,7 @@ import (
 // NOTE: the RANDOM opcode is currently not supported since it requires
 // RANDAO implementation. See https://github.com/evmos/ethermint/pull/1520#pullrequestreview-1200504697
 // for more information.
-func (k *Keeper) NewEVM(
+func (k *Keeper) NewSgxRpcClient(
 	ctx sdk.Context,
 	msg core.Message,
 	cfg *EVMConfig,
@@ -326,9 +326,9 @@ func (k *Keeper) ApplyMessageWithConfig(
 		}
 	}
 
-	sgxRpcClient, err := k.NewEVM(ctx, msg, cfg, stateDB)
+	sgxRpcClient, err := k.NewSgxRpcClient(ctx, msg, cfg, stateDB)
 	if err != nil {
-		return nil, errorsmod.Wrap(err, "failed to create new EVM")
+		return nil, errorsmod.Wrap(err, "failed to create new SGX rpc client")
 	}
 
 	// TODO Think about whether the RPC server should be persistent or ephemeral
