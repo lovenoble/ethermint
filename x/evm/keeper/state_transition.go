@@ -49,25 +49,8 @@ func (k *Keeper) NewEVM(
 	msg core.Message,
 	cfg *EVMConfig,
 	stateDB vm.StateDB,
-) *vm.EVM {
-	blockCtx := vm.BlockContext{
-		CanTransfer: core.CanTransfer,
-		Transfer:    core.Transfer,
-		GetHash:     k.GetHashFn(ctx),
-		Coinbase:    cfg.CoinBase,
-		GasLimit:    ethermint.BlockGasLimit(ctx),
-		BlockNumber: big.NewInt(ctx.BlockHeight()),
-		Time:        uint64(ctx.BlockHeader().Time.Unix()),
-		Difficulty:  big.NewInt(0), // unused. Only required in PoW context
-		BaseFee:     cfg.BaseFee,
-		Random:      nil, // not supported
-	}
-	txCtx := core.NewEVMTxContext(&msg)
-	if cfg.Tracer == nil {
-		cfg.Tracer = k.Tracer(ctx, msg, cfg.ChainConfig)
-	}
-	vmConfig := k.VMConfig(ctx, msg, cfg)
-	return vm.NewEVM(blockCtx, txCtx, stateDB, cfg.ChainConfig, vmConfig)
+) EvmRpcClient {
+	panic("implement me: create a new RPC client")
 }
 
 // GetHashFn implements vm.GetHashFunc for Ethermint. It handles 3 cases:
@@ -332,17 +315,17 @@ func (k *Keeper) ApplyMessageWithConfig(
 	}
 
 	stateDB := statedb.NewWithParams(ctx, k, cfg.TxConfig, cfg.Params.EvmDenom)
-	var evm *vm.EVM
+
 	if cfg.Overrides != nil {
 		if err := cfg.Overrides.Apply(stateDB); err != nil {
 			return nil, errorsmod.Wrap(err, "failed to apply state override")
 		}
 	}
-	evm = k.NewEVM(ctx, msg, cfg, stateDB)
+	evm := k.NewEVM(ctx, msg, cfg, stateDB)
 	leftoverGas := msg.GasLimit
 	sender := vm.AccountRef(msg.From)
 	// Allow the tracer captures the tx level events, mainly the gas consumption.
-	vmCfg := evm.Config
+	vmCfg := k.VMConfig(ctx, msg, cfg)
 	if vmCfg.Tracer != nil {
 		if cfg.DebugTrace {
 			// msg.GasPrice should have been set to effective gas price
@@ -358,7 +341,7 @@ func (k *Keeper) ApplyMessageWithConfig(
 		}()
 	}
 
-	isLondon := cfg.ChainConfig.IsLondon(evm.Context.BlockNumber)
+	isLondon := cfg.ChainConfig.IsLondon(big.NewInt(ctx.BlockHeight()))
 	contractCreation := msg.To == nil
 	intrinsicGas, err := k.GetEthIntrinsicGas(ctx, msg, cfg.ChainConfig, contractCreation)
 	if err != nil {
