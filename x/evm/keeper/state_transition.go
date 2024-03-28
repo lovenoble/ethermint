@@ -52,8 +52,9 @@ func (k *Keeper) NewEVM(
 	msg core.Message,
 	cfg *EVMConfig,
 	stateDB vm.StateDB,
-) EvmRpcClient {
-	panic("implement me: create a new RPC client")
+) (*rpc.Client, error) {
+	return rpc.DialHTTP("tcp", "localhost"+":90091")
+
 }
 
 // GetHashFn implements vm.GetHashFunc for Ethermint. It handles 3 cases:
@@ -325,7 +326,11 @@ func (k *Keeper) ApplyMessageWithConfig(
 		}
 	}
 
-	evm := k.NewEVM(ctx, msg, cfg, stateDB)
+	sgxRpcClient, err := k.NewEVM(ctx, msg, cfg, stateDB)
+	if err != nil {
+		return nil, errorsmod.Wrap(err, "failed to create new EVM")
+	}
+
 	// TODO Think about whether the RPC server should be persistent or ephemeral
 	//  - If it's persistent, we need to handle the lifecycle of the RPC server
 	//  - If it's ephemeral, we need to create a new RPC server for each message
@@ -355,12 +360,9 @@ func (k *Keeper) ApplyMessageWithConfig(
 		Msg:       msg,
 		EvmConfig: *cfg,
 	}
-	client, err := rpc.DialHTTP("tcp", "localhost"+":90091")
-	if err != nil {
-		return nil, err
-	}
+
 	var reply PrepareTxReply
-	err = client.Call("SgxServer.PrepareTx", args, &reply)
+	err = sgxRpcClient.Call("SgxServer.PrepareTx", args, &reply)
 	if err != nil {
 		return nil, err
 	}
@@ -418,10 +420,20 @@ func (k *Keeper) ApplyMessageWithConfig(
 		// - reset sender's nonce to msg.Nonce() before calling evm.
 		// - increase sender's nonce by one no matter the result.
 		stateDB.SetNonce(sender.Address(), msg.Nonce)
-		ret, _, leftoverGas, vmErr = evm.Create(sender, msg.Data, leftoverGas, msg.Value)
+
+		var reply CreateReply
+		vmErr = sgxRpcClient.Call("SgxServer.Create", args, &reply)
+
+		ret = reply.Ret
+		leftoverGas = reply.LeftOverGas
+
 		stateDB.SetNonce(sender.Address(), msg.Nonce+1)
 	} else {
-		ret, leftoverGas, vmErr = evm.Call(sender, *msg.To, msg.Data, leftoverGas, msg.Value)
+		var reply CallReply
+		vmErr = sgxRpcClient.Call("SgxServer.Call", args, &reply)
+
+		ret = reply.Ret
+		leftoverGas = reply.LeftOverGas
 	}
 
 	refundQuotient := params.RefundQuotient
