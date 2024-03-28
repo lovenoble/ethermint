@@ -9,8 +9,8 @@ import (
 	"github.com/evmos/ethermint/x/evm/statedb"
 )
 
-// KeeperRpcServer is a wrapper around the statedb.Keeper interface that provides an
-// RPC server.
+// KeeperRpcServer is a wrapper around the evm module's Keeper methods that
+// serves as an RPC server.
 type KeeperRpcServer interface {
 	// GetHash returns the hash of the block at the given height.
 	GetHash(height *uint64, hash *common.Hash) error

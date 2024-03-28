@@ -8,7 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 )
 
-// PrepareTxArgs is the argument struct for the statedb.Keeper#PrepareTx method.
+// PrepareTxArgs is the argument struct for the PrepareTx RPC method.
 type PrepareTxArgs struct {
 	// PrepareTxBlockContext is the context of the block in which the transaction
 	// will be executed.
@@ -28,7 +28,7 @@ type PrepareTxBlockContext struct {
 	BlockTime     int64
 }
 
-// PrepareTxReply is the reply struct for the statedb.Keeper#PrepareTx method.
+// PrepareTxArgs is the reply struct for the PrepareTx RPC method.
 type PrepareTxReply struct {
 }
 
