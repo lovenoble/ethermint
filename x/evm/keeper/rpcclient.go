@@ -20,6 +20,9 @@ type PrepareTxArgs struct {
 	// IMPORTANT: the tracer field should not be set on this field here,
 	// because it is an interface and cannot be passed over RPC.
 	EvmConfig EVMConfig
+
+	// Left over gas deducted from gas limit
+	LeftOverGas uint64
 }
 
 type PrepareTxBlockContext struct {
