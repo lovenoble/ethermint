@@ -9,89 +9,63 @@ import (
 	"github.com/evmos/ethermint/x/evm/statedb"
 )
 
-// KeeperRpcServer is a wrapper around the evm module's Keeper methods that
-// serves as an RPC server.
-type KeeperRpcServer interface {
-	// GetHash returns the hash of the block at the given height.
-	GetHash(height *uint64, hash *common.Hash) error
-
-	// Below methods are used by statedb.Keeper interface.
-
-	AddBalance(args *AddBalanceArgs, reply *AddBalanceReply) error
-	SubBalance(args *SubBalanceArgs, reply *SubBalanceReply) error
-	GetBalance(args *GetBalanceArgs, reply *GetBalanceReply) error
-
-	GetAccount(args *GetAccountArgs, reply *GetAccountReply) error
-	GetState(args *GetStateArgs, reply *GetStateReply) error
-	GetCode(args *GetCodeArgs, reply *GetCodeReply) error
-
-	SetAccount(args *SetAccountArgs, reply *SetAccountReply) error
-	SetState(args *SetStateArgs, reply *SetStateReply) error
-	SetCode(args *SetCodeArgs, reply *SetCodeReply) error
-	DeleteAccount(args *DeleteAccountArgs, reply *DeleteAccountReply) error
-
-	// Following methods statedb.Keeper are not used by the EVM, so are not
-	// implemented. They are included here for completeness.
-	// - SetBalance
-	// - GetParams
-	// - ForEachStorage
-}
-
-type keeperRpcServer struct {
+// EthmRpcServer is a RPC server wrapper around the keeper. It is updated on
+// each new sdk.Message with the latest context and Ethereum core.Message.
+type EthmRpcServer struct {
 	ctx    sdk.Context
 	msg    core.Message
 	evmCfg *EVMConfig
 	k      *Keeper
 }
 
-func (s *keeperRpcServer) GetHash(height *uint64, hash *common.Hash) error {
+func (s *EthmRpcServer) GetHash(height *uint64, hash *common.Hash) error {
 	*hash = s.k.GetHashFn(s.ctx)(*height)
 	return nil
 }
 
-func (s *keeperRpcServer) AddBalance(args *AddBalanceArgs, reply *AddBalanceReply) error {
+func (s *EthmRpcServer) AddBalance(args *AddBalanceArgs, reply *AddBalanceReply) error {
 	return s.k.AddBalance(s.ctx, args.Addr, args.Amount)
 }
 
-func (s *keeperRpcServer) SubBalance(args *SubBalanceArgs, reply *SubBalanceReply) error {
+func (s *EthmRpcServer) SubBalance(args *SubBalanceArgs, reply *SubBalanceReply) error {
 	return s.k.SubBalance(s.ctx, args.Addr, args.Amount)
 }
 
-func (s *keeperRpcServer) GetBalance(args *GetBalanceArgs, reply *GetBalanceReply) error {
+func (s *EthmRpcServer) GetBalance(args *GetBalanceArgs, reply *GetBalanceReply) error {
 	reply.Balance = s.k.GetBalance(s.ctx, args.Addr, args.Denom)
 	return nil
 }
 
-func (s *keeperRpcServer) GetAccount(args *GetAccountArgs, reply *GetAccountReply) error {
+func (s *EthmRpcServer) GetAccount(args *GetAccountArgs, reply *GetAccountReply) error {
 	reply.Account = s.k.GetAccount(s.ctx, args.Addr)
 	return nil
 }
 
-func (s *keeperRpcServer) GetState(args *GetStateArgs, reply *GetStateReply) error {
+func (s *EthmRpcServer) GetState(args *GetStateArgs, reply *GetStateReply) error {
 	reply.Hash = s.k.GetState(s.ctx, args.Addr, args.Key)
 	return nil
 }
 
-func (s *keeperRpcServer) GetCode(args *GetCodeArgs, reply *GetCodeReply) error {
+func (s *EthmRpcServer) GetCode(args *GetCodeArgs, reply *GetCodeReply) error {
 	reply.Code = s.k.GetCode(s.ctx, args.CodeHash)
 	return nil
 }
 
-func (s *keeperRpcServer) SetAccount(args *SetAccountArgs, reply *SetAccountReply) error {
+func (s *EthmRpcServer) SetAccount(args *SetAccountArgs, reply *SetAccountReply) error {
 	return s.k.SetAccount(s.ctx, args.Addr, args.Account)
 }
 
-func (s *keeperRpcServer) SetState(args *SetStateArgs, reply *SetStateReply) error {
+func (s *EthmRpcServer) SetState(args *SetStateArgs, reply *SetStateReply) error {
 	s.k.SetState(s.ctx, args.Addr, args.Key, args.Value)
 	return nil
 }
 
-func (s *keeperRpcServer) SetCode(args *SetCodeArgs, reply *SetCodeReply) error {
+func (s *EthmRpcServer) SetCode(args *SetCodeArgs, reply *SetCodeReply) error {
 	s.k.SetCode(s.ctx, args.CodeHash, args.Code)
 	return nil
 }
 
-func (s *keeperRpcServer) DeleteAccount(args *DeleteAccountArgs, reply *DeleteAccountReply) error {
+func (s *EthmRpcServer) DeleteAccount(args *DeleteAccountArgs, reply *DeleteAccountReply) error {
 	return s.k.DeleteAccount(s.ctx, args.Addr)
 }
 
@@ -99,7 +73,6 @@ func (s *keeperRpcServer) DeleteAccount(args *DeleteAccountArgs, reply *DeleteAc
 type AddBalanceArgs struct {
 	Addr   sdk.AccAddress
 	Amount sdk.Coins
-	Denom  string
 }
 
 // AddBalanceReply is the reply struct for the statedb.Keeper#AddBalance method.
@@ -110,7 +83,6 @@ type AddBalanceReply struct {
 type SubBalanceArgs struct {
 	Addr   sdk.AccAddress
 	Amount sdk.Coins
-	Denom  string
 }
 
 // SubBalanceReply is the reply struct for the statedb.Keeper#SubBalance method.

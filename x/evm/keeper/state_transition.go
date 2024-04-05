@@ -16,6 +16,7 @@
 package keeper
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"net"
@@ -38,24 +39,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 )
-
-// NewEVM generates a go-ethereum VM from the provided Message fields and the chain parameters
-// (ChainConfig and module Params). It additionally sets the validator operator address as the
-// coinbase address to make it available for the COINBASE opcode, even though there is no
-// beneficiary of the coinbase transaction (since we're not mining).
-//
-// NOTE: the RANDOM opcode is currently not supported since it requires
-// RANDAO implementation. See https://github.com/evmos/ethermint/pull/1520#pullrequestreview-1200504697
-// for more information.
-func (k *Keeper) NewSgxRpcClient(
-	ctx sdk.Context,
-	msg core.Message,
-	cfg *EVMConfig,
-	stateDB vm.StateDB,
-) (*rpc.Client, error) {
-	return rpc.DialHTTP("tcp", "localhost"+":90091")
-
-}
 
 // GetHashFn implements vm.GetHashFunc for Ethermint. It handles 3 cases:
 //  1. The requested height matches the current height from context (and thus same epoch number)
@@ -319,52 +302,20 @@ func (k *Keeper) ApplyMessageWithConfig(
 	}
 
 	stateDB := statedb.NewWithParams(ctx, k, cfg.TxConfig, cfg.Params.EvmDenom)
-
 	if cfg.Overrides != nil {
 		if err := cfg.Overrides.Apply(stateDB); err != nil {
 			return nil, errorsmod.Wrap(err, "failed to apply state override")
 		}
 	}
 
-	sgxRpcClient, err := k.NewSgxRpcClient(ctx, msg, cfg, stateDB)
+	sgxRpcClient, err := newSgxRpcClient(k.Logger(ctx))
 	if err != nil {
 		return nil, errorsmod.Wrap(err, "failed to create new SGX rpc client")
 	}
 
-	// TODO Think about whether the RPC server should be persistent or ephemeral
-	//  - If it's persistent, we need to handle the lifecycle of the RPC server
-	//  - If it's ephemeral, we need to create a new RPC server for each message
-	//  - The current implementation is ephemeral
-	rpcSrv := keeperRpcServer{
-		ctx:    ctx,
-		msg:    msg,
-		evmCfg: cfg,
-		k:      k,
-	}
-	rpc.Register(rpcSrv)
-	rpc.HandleHTTP()
-	l, e := net.Listen("tcp", ":90090")
-	if e != nil {
-		return nil, e
-	}
-	http.Serve(l, nil)
-	defer l.Close()
-
-	// Send the PrepareTx RPC call to the SGX binary.
-	args := PrepareTxArgs{
-		BlockContext: PrepareTxBlockContext{
-			BlockHeight:   ctx.BlockHeight(),
-			BlockGasLimit: ethermint.BlockGasLimit(ctx),
-			BlockTime:     ctx.BlockTime().Unix(),
-		},
-		Msg:       msg,
-		EvmConfig: *cfg,
-	}
-
-	var reply PrepareTxReply
-	err = sgxRpcClient.Call("SgxServer.PrepareTx", args, &reply)
+	err = k.prepareTxForSgx(ctx, msg, cfg, sgxRpcClient)
 	if err != nil {
-		return nil, err
+		return nil, errorsmod.Wrap(err, "failed to create new RPC server")
 	}
 
 	leftoverGas := msg.GasLimit
@@ -422,16 +373,25 @@ func (k *Keeper) ApplyMessageWithConfig(
 		stateDB.SetNonce(sender.Address(), msg.Nonce)
 
 		var reply CreateReply
-		vmErr = sgxRpcClient.Call("SgxServer.Create", args, &reply)
-
+		vmErr = sgxRpcClient.Create(&CreateArgs{
+			Caller: sender,
+			Code:   msg.Data,
+			Gas:    leftoverGas,
+			Value:  msg.Value,
+		}, &reply)
 		ret = reply.Ret
 		leftoverGas = reply.LeftOverGas
 
 		stateDB.SetNonce(sender.Address(), msg.Nonce+1)
 	} else {
 		var reply CallReply
-		vmErr = sgxRpcClient.Call("SgxServer.Call", args, &reply)
-
+		vmErr = sgxRpcClient.Call(&CallArgs{
+			Caller: sender,
+			Addr:   *msg.To,
+			Input:  msg.Data,
+			Gas:    leftoverGas,
+			Value:  msg.Value,
+		}, &reply)
 		ret = reply.Ret
 		leftoverGas = reply.LeftOverGas
 	}
@@ -491,4 +451,57 @@ func (k *Keeper) ApplyMessageWithConfig(
 		Hash:      cfg.TxConfig.TxHash.Hex(),
 		BlockHash: ctx.HeaderHash(),
 	}, nil
+}
+
+// prepareTxForSgx prepares the transaction for the SGX enclave. It:
+//   - creates an RPC server around the keeper to receive requests sent by the
+//     SGX
+//   - sends a "PrepareTx" request to the SGX enclave with the relevant tx and
+//     block info
+func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConfig, sgxRpcClient *sgxRpcClient) error {
+	defer func() {
+		if r := recover(); r != nil {
+			ctx.Logger().Debug("recovered from panic", "error", r)
+		}
+	}()
+
+	// Step 1. Create an RPC server to receive requests from the SGX enclave.
+	//
+	// TODO Think about whether the RPC server should be persistent or ephemeral
+	//  - If it's persistent, we need to handle the lifecycle of the RPC server
+	//  - If it's ephemeral, we need to create a new RPC server for each message
+	//  The current implementation is ephemeral.
+	srv := &EthmRpcServer{k: k, ctx: ctx, msg: msg, evmCfg: cfg}
+	rpc.Register(srv)
+	rpc.HandleHTTP()
+
+	l, err := net.Listen("tcp", ":9093")
+	if err != nil {
+		// TODO handle error
+		panic(err)
+	}
+	// TODO Handle shutdown
+	go http.Serve(l, nil)
+
+	// Step 2. Send a "PrepareTx" request to the SGX enclave.
+	chainConfigJson, err := json.Marshal(cfg.ChainConfig)
+	if err != nil {
+		return err
+	}
+	ctx.HeaderHash()
+	args := PrepareTxArgs{
+		Header: ctx.BlockHeader(),
+		Msg:    msg,
+		EvmConfig: PrepareTxEVMConfig{
+			ChainConfigJson: chainConfigJson,
+			CoinBase:        cfg.CoinBase,
+			BaseFee:         cfg.BaseFee,
+			TxConfig:        cfg.TxConfig,
+			DebugTrace:      cfg.DebugTrace,
+			NoBaseFee:       cfg.FeeMarketParams.NoBaseFee,
+			EvmDenom:        cfg.Params.EvmDenom,
+		},
+	}
+
+	return sgxRpcClient.PrepareTx(&args, &PrepareTxReply{})
 }
