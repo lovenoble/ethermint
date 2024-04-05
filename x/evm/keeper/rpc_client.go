@@ -32,7 +32,7 @@ func newSgxRpcClient(logger log.Logger) (*sgxRpcClient, error) {
 	}, nil
 }
 
-func (c *sgxRpcClient) makeCall(method string, args, reply any) error {
+func (c *sgxRpcClient) doCall(method string, args, reply any) error {
 	c.logger.Debug(fmt.Sprintf("RPC call %s", method), "args", args)
 	err := c.cl.Call(method, args, reply)
 	if err != nil {
@@ -43,16 +43,16 @@ func (c *sgxRpcClient) makeCall(method string, args, reply any) error {
 	return err
 }
 
-func (c *sgxRpcClient) PrepareTx(args *PrepareTxArgs, reply *PrepareTxReply) error {
-	return c.makeCall("SgxRpcServer.PrepareTx", args, reply)
+func (c *sgxRpcClient) PrepareTx(args PrepareTxArgs, reply *PrepareTxReply) error {
+	return c.doCall("SgxRpcServer.PrepareTx", args, reply)
 }
 
-func (c *sgxRpcClient) Call(args *CallArgs, reply *CallReply) error {
-	return c.makeCall("SgxRpcServer.Call", args, reply)
+func (c *sgxRpcClient) Call(args CallArgs, reply *CallReply) error {
+	return c.doCall("SgxRpcServer.Call", args, reply)
 }
 
-func (c *sgxRpcClient) Create(args *CreateArgs, reply *CreateReply) error {
-	return c.makeCall("SgxRpcServer.Create", args, reply)
+func (c *sgxRpcClient) Create(args CreateArgs, reply *CreateReply) error {
+	return c.doCall("SgxRpcServer.Create", args, reply)
 }
 
 // PrepareTxEVMConfig only contains the fields from EVMConfig that are needed
@@ -81,6 +81,7 @@ type PrepareTxEVMConfig struct {
 
 // PrepareTxArgs is the argument struct for the SgxRpcServer.PrepareTx RPC method.
 type PrepareTxArgs struct {
+	TxHash []byte
 	// Header is the Tendermint header of the block in which the transaction
 	// will be executed.
 	Header cmtproto.Header

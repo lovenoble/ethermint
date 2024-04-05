@@ -373,7 +373,7 @@ func (k *Keeper) ApplyMessageWithConfig(
 		stateDB.SetNonce(sender.Address(), msg.Nonce)
 
 		var reply CreateReply
-		vmErr = sgxRpcClient.Create(&CreateArgs{
+		vmErr = sgxRpcClient.Create(CreateArgs{
 			Caller: sender,
 			Code:   msg.Data,
 			Gas:    leftoverGas,
@@ -385,7 +385,7 @@ func (k *Keeper) ApplyMessageWithConfig(
 		stateDB.SetNonce(sender.Address(), msg.Nonce+1)
 	} else {
 		var reply CallReply
-		vmErr = sgxRpcClient.Call(&CallArgs{
+		vmErr = sgxRpcClient.Call(CallArgs{
 			Caller: sender,
 			Addr:   *msg.To,
 			Input:  msg.Data,
@@ -459,29 +459,11 @@ func (k *Keeper) ApplyMessageWithConfig(
 //   - sends a "PrepareTx" request to the SGX enclave with the relevant tx and
 //     block info
 func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConfig, sgxRpcClient *sgxRpcClient) error {
-	defer func() {
-		if r := recover(); r != nil {
-			ctx.Logger().Debug("recovered from panic", "error", r)
-		}
-	}()
-
 	// Step 1. Create an RPC server to receive requests from the SGX enclave.
-	//
-	// TODO Think about whether the RPC server should be persistent or ephemeral
-	//  - If it's persistent, we need to handle the lifecycle of the RPC server
-	//  - If it's ephemeral, we need to create a new RPC server for each message
-	//  The current implementation is ephemeral.
-	srv := &EthmRpcServer{k: k, ctx: ctx, msg: msg, evmCfg: cfg}
-	rpc.Register(srv)
-	rpc.HandleHTTP()
-
-	l, err := net.Listen("tcp", ":9093")
+	err := k.runRpcServer(ctx, msg, cfg)
 	if err != nil {
-		// TODO handle error
-		panic(err)
+		return err
 	}
-	// TODO Handle shutdown
-	go http.Serve(l, nil)
 
 	// Step 2. Send a "PrepareTx" request to the SGX enclave.
 	chainConfigJson, err := json.Marshal(cfg.ChainConfig)
@@ -503,5 +485,32 @@ func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConf
 		},
 	}
 
-	return sgxRpcClient.PrepareTx(&args, &PrepareTxReply{})
+	return sgxRpcClient.PrepareTx(args, &PrepareTxReply{})
+}
+
+func (k *Keeper) runRpcServer(ctx sdk.Context, msg core.Message, cfg *EVMConfig) error {
+	defer func() {
+		if r := recover(); r != nil {
+			ctx.Logger().Debug("recovered from panic", "error", r)
+		}
+	}()
+
+	// TODO Think about whether the RPC server should be persistent or ephemeral
+	//  - If it's persistent, we need to handle the lifecycle of the RPC server
+	//  - If it's ephemeral, we need to create a new RPC server for each message
+	//  The current implementation is ephemeral.
+	srv := &EthmRpcServer{k: k, ctx: ctx, msg: msg, evmCfg: cfg}
+	rpc.Register(srv)
+	rpc.HandleHTTP()
+
+	// TODO handle port customization
+	l, err := net.Listen("tcp", ":9093")
+	if err != nil {
+		// TODO handle error
+		panic(err)
+	}
+	// TODO Handle shutdown
+	go http.Serve(l, nil)
+
+	return nil
 }
