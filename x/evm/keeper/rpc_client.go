@@ -35,11 +35,7 @@ func newSgxRpcClient(logger log.Logger) (*sgxRpcClient, error) {
 func (c *sgxRpcClient) doCall(method string, args, reply any) error {
 	c.logger.Debug(fmt.Sprintf("RPC call %s", method), "args", args)
 	err := c.cl.Call(method, args, reply)
-	if err != nil {
-		c.logger.Error(fmt.Sprintf("RPC call %s failed", method), "err", err)
-	} else {
-		c.logger.Debug(fmt.Sprintf("RPC call %s", method), "reply", reply)
-	}
+	c.logger.Debug(fmt.Sprintf("RPC call %s", method), "reply", reply)
 	return err
 }
 

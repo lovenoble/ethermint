@@ -460,7 +460,7 @@ func (k *Keeper) ApplyMessageWithConfig(
 //     block info
 func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConfig, sgxRpcClient *sgxRpcClient) error {
 	// Step 1. Create an RPC server to receive requests from the SGX enclave.
-	err := k.runRpcServer(ctx, msg, cfg)
+	err := k.runRPCServer(ctx, msg, cfg)
 	if err != nil {
 		return err
 	}
@@ -488,7 +488,7 @@ func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConf
 	return sgxRpcClient.PrepareTx(args, &PrepareTxReply{})
 }
 
-func (k *Keeper) runRpcServer(ctx sdk.Context, msg core.Message, cfg *EVMConfig) error {
+func (k *Keeper) runRPCServer(ctx sdk.Context, msg core.Message, cfg *EVMConfig) error {
 	defer func() {
 		if r := recover(); r != nil {
 			ctx.Logger().Debug("recovered from panic", "error", r)
