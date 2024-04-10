@@ -300,12 +300,12 @@ func (k *Keeper) ApplyMessageWithConfig(
 		return nil, errorsmod.Wrap(types.ErrCallDisabled, "failed to call contract")
 	}
 
-	sgxRpcClient, err := newSgxRpcClient(k.Logger(ctx))
+	sgxRPCClient, err := newSgxRPCClient(k.Logger(ctx))
 	if err != nil {
 		return nil, errorsmod.Wrap(err, "failed to create new SGX rpc client")
 	}
 
-	err = k.prepareTxForSgx(ctx, msg, cfg, sgxRpcClient)
+	err = k.prepareTxForSgx(ctx, msg, cfg, sgxRPCClient)
 	if err != nil {
 		return nil, errorsmod.Wrap(err, "failed to create new RPC server")
 	}
@@ -317,30 +317,43 @@ func (k *Keeper) ApplyMessageWithConfig(
 	if vmCfg.Tracer != nil {
 		if cfg.DebugTrace {
 			// msg.GasPrice should have been set to effective gas price
+
+			// Ethermint original code:
 			// stateDB.SubBalance(sender.Address(), new(big.Int).Mul(msg.GasPrice, new(big.Int).SetUint64(msg.GasLimit)))
 			var reply StateDBSubBalanceReply
-			sgxRpcClient.StateDBSubBalance(StateDBSubBalanceArgs{
+			err := sgxRPCClient.StateDBSubBalance(StateDBSubBalanceArgs{
 				Caller: sender,
 				Msg:    msg,
 			}, &reply)
+			if err != nil {
+				return nil, err
+			}
 
+			// Ethermint original code:
 			// stateDB.SetNonce(sender.Address(), stateDB.GetNonce(sender.Address())+1)
 			var replyNonce StateDBIncreaseNonceReply
-			sgxRpcClient.StateDBIncreaseNonce(StateDBIncreaseNonceArgs{
+			err = sgxRPCClient.StateDBIncreaseNonce(StateDBIncreaseNonceArgs{
 				Caller: sender,
 				Msg:    msg,
 			}, &replyNonce)
+			if err != nil {
+				return nil, err
+			}
 		}
 		vmCfg.Tracer.CaptureTxStart(leftoverGas)
 		defer func() {
 			if cfg.DebugTrace {
+				// Ethermint original code:
 				// stateDB.AddBalance(sender.Address(), new(big.Int).Mul(msg.GasPrice, new(big.Int).SetUint64(leftoverGas)))
 				var reply StateDBAddBalanceReply
-				sgxRpcClient.StateDBAddBalance(StateDBAddBalanceArgs{
+				err := sgxRPCClient.StateDBAddBalance(StateDBAddBalanceArgs{
 					Caller:      sender,
 					Msg:         msg,
 					LeftoverGas: leftoverGas,
 				}, &reply)
+				if err != nil {
+					k.Logger(ctx).Error("failed to add balance to sgx stateDB", "error", err)
+				}
 			}
 			vmCfg.Tracer.CaptureTxEnd(leftoverGas)
 		}()
@@ -373,26 +386,38 @@ func (k *Keeper) ApplyMessageWithConfig(
 	// Execute the preparatory steps for state transition which includes:
 	// - prepare accessList(post-berlin)
 	// - reset transient storage(eip 1153)
+
+	// Ethermint original code:
 	// stateDB.Prepare(rules, msg.From, cfg.CoinBase, msg.To, vm.ActivePrecompiles(rules), msg.AccessList)
 	var replyPrepare StateDBPrepareReply
-	sgxRpcClient.StateDBPrepare(StateDBPrepareArgs{
+	err = sgxRPCClient.StateDBPrepare(StateDBPrepareArgs{
 		Msg:   msg,
 		Rules: rules,
 	}, &replyPrepare)
+	if err != nil {
+		return nil, err
+	}
 
 	if contractCreation {
 		// take over the nonce management from evm:
 		// - reset sender's nonce to msg.Nonce() before calling evm.
 		// - increase sender's nonce by one no matter the result.
+
+		// Ethermint original code:
 		// stateDB.SetNonce(sender.Address(), msg.Nonce)
 		var replyNonce StateDBSetNonceReply
-		sgxRpcClient.StateDBSetNonce(StateDBSetNonceArgs{
+		err := sgxRPCClient.StateDBSetNonce(StateDBSetNonceArgs{
 			Caller: sender,
 			Nonce:  msg.Nonce,
 		}, &replyNonce)
+		if err != nil {
+			return nil, err
+		}
 
+		// Ethermint original code:
+		// ret, _, leftoverGas, vmErr = evm.Create(sender, msg.Data, leftoverGas, msg.Value)
 		var reply CreateReply
-		vmErr = sgxRpcClient.Create(CreateArgs{
+		vmErr = sgxRPCClient.Create(CreateArgs{
 			Caller: sender,
 			Code:   msg.Data,
 			Gas:    leftoverGas,
@@ -401,14 +426,17 @@ func (k *Keeper) ApplyMessageWithConfig(
 		ret = reply.Ret
 		leftoverGas = reply.LeftOverGas
 
+		// Ethermint original code:
 		// stateDB.SetNonce(sender.Address(), msg.Nonce+1)
-		sgxRpcClient.StateDBSetNonce(StateDBSetNonceArgs{
+		sgxRPCClient.StateDBSetNonce(StateDBSetNonceArgs{
 			Caller: sender,
 			Nonce:  msg.Nonce + 1,
 		}, &replyNonce)
 	} else {
+		// Ethermint original code:
+		// ret, leftoverGas, vmErr = evm.Call(sender, *msg.To, msg.Data, leftoverGas, msg.Value)
 		var reply CallReply
-		vmErr = sgxRpcClient.Call(CallArgs{
+		vmErr = sgxRPCClient.Call(CallArgs{
 			Caller: sender,
 			Addr:   *msg.To,
 			Input:  msg.Data,
@@ -434,8 +462,13 @@ func (k *Keeper) ApplyMessageWithConfig(
 	// refund gas
 	temporaryGasUsed := msg.GasLimit - leftoverGas
 
+	// Ethermint original code:
+	// leftoverGas += GasToRefund(stateDB.GetRefund(), temporaryGasUsed, refundQuotient)
 	var replyRefund StateDBGetRefundReply
-	sgxRpcClient.StateDBGetRefund(StateDBGetRefundArgs{}, &replyRefund)
+	err = sgxRPCClient.StateDBGetRefund(StateDBGetRefundArgs{}, &replyRefund)
+	if err != nil {
+		return nil, err
+	}
 
 	refund := replyRefund.Refund
 	leftoverGas += GasToRefund(refund, temporaryGasUsed, refundQuotient)
@@ -448,18 +481,17 @@ func (k *Keeper) ApplyMessageWithConfig(
 
 	// The dirty states in `StateDB` is either committed or discarded after return
 	if commit {
+		// Ethermint original code:
+		// if err := stateDB.Commit(); err != nil {
+		// 		return nil, errorsmod.Wrap(err, "failed to commit stateDB")
+		// }
 		var reply CommitReply
-		vmErr = sgxRpcClient.Commit(CommitArgs{
+		err := sgxRPCClient.Commit(CommitArgs{
 			Commit: true,
 		}, &reply)
-
-		if vmErr != nil {
+		if err != nil {
 			return nil, errorsmod.Wrap(err, "failed to commit sgx stateDB")
 		}
-
-		// if err := stateDB.Commit(); err != nil {
-		// 	return nil, errorsmod.Wrap(err, "failed to commit stateDB")
-		// }
 	}
 
 	// calculate a minimum amount of gas to be charged to sender if GasLimit
@@ -481,8 +513,13 @@ func (k *Keeper) ApplyMessageWithConfig(
 	// reset leftoverGas, to be used by the tracer
 	leftoverGas = msg.GasLimit - gasUsed
 
+	// Ethermint original code:
+	// Logs: types.NewLogsFromEth(stateDB.Logs()),
 	var replyLog StateDBGetLogsReply
-	sgxRpcClient.StateDBGetLogs(StateDBGetLogsArgs{}, &replyLog)
+	err = sgxRPCClient.StateDBGetLogs(StateDBGetLogsArgs{}, &replyLog)
+	if err != nil {
+		return nil, err
+	}
 
 	return &types.MsgEthereumTxResponse{
 		GasUsed:   gasUsed,
@@ -499,7 +536,7 @@ func (k *Keeper) ApplyMessageWithConfig(
 //     SGX
 //   - sends a "PrepareTx" request to the SGX enclave with the relevant tx and
 //     block info
-func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConfig, sgxRpcClient *sgxRpcClient) error {
+func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConfig, sgxRPCClient *sgxRPCClient) error {
 	// Step 1. Create an RPC server to receive requests from the SGX enclave.
 	err := k.runRPCServer(ctx, msg, cfg)
 	if err != nil {
@@ -507,7 +544,7 @@ func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConf
 	}
 
 	// Step 2. Send a "PrepareTx" request to the SGX enclave.
-	chainConfigJson, err := json.Marshal(cfg.ChainConfig)
+	ChainConfigJson, err := json.Marshal(cfg.ChainConfig)
 	if err != nil {
 		return err
 	}
@@ -516,7 +553,7 @@ func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConf
 		Header: ctx.BlockHeader(),
 		Msg:    msg,
 		EvmConfig: PrepareTxEVMConfig{
-			ChainConfigJson: chainConfigJson,
+			ChainConfigJson: ChainConfigJson,
 			CoinBase:        cfg.CoinBase,
 			BaseFee:         cfg.BaseFee,
 			TxConfig:        cfg.TxConfig,
@@ -527,7 +564,7 @@ func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConf
 		},
 	}
 
-	return sgxRpcClient.PrepareTx(args, &PrepareTxReply{})
+	return sgxRPCClient.PrepareTx(args, &PrepareTxReply{})
 }
 
 func (k *Keeper) runRPCServer(ctx sdk.Context, msg core.Message, cfg *EVMConfig) error {

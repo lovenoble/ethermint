@@ -15,73 +15,73 @@ import (
 	"github.com/evmos/ethermint/x/evm/statedb"
 )
 
-type sgxRpcClient struct {
+type sgxRPCClient struct {
 	logger log.Logger
 	cl     *rpc.Client
 }
 
-// newSgxRpcClient creates a new RPC client to communicate with the SGX binary.
-func newSgxRpcClient(logger log.Logger) (*sgxRpcClient, error) {
+// newSgxRPCClient creates a new RPC client to communicate with the SGX binary.
+func newSgxRPCClient(logger log.Logger) (*sgxRPCClient, error) {
 	// TODO Make ports configurable
 	cl, err := rpc.DialHTTP("tcp", "localhost"+":9092")
 	if err != nil {
 		return nil, err
 	}
 
-	return &sgxRpcClient{
+	return &sgxRPCClient{
 		logger: logger,
 		cl:     cl,
 	}, nil
 }
 
-func (c *sgxRpcClient) doCall(method string, args, reply any) error {
+func (c *sgxRPCClient) doCall(method string, args, reply any) error {
 	c.logger.Debug(fmt.Sprintf("RPC call %s", method), "args", args)
 	err := c.cl.Call(method, args, reply)
 	c.logger.Debug(fmt.Sprintf("RPC call %s", method), "reply", reply)
 	return err
 }
 
-func (c *sgxRpcClient) PrepareTx(args PrepareTxArgs, reply *PrepareTxReply) error {
+func (c *sgxRPCClient) PrepareTx(args PrepareTxArgs, reply *PrepareTxReply) error {
 	return c.doCall("SgxRpcServer.PrepareTx", args, reply)
 }
 
-func (c *sgxRpcClient) Call(args CallArgs, reply *CallReply) error {
+func (c *sgxRPCClient) Call(args CallArgs, reply *CallReply) error {
 	return c.doCall("SgxRpcServer.Call", args, reply)
 }
 
-func (c *sgxRpcClient) Create(args CreateArgs, reply *CreateReply) error {
+func (c *sgxRPCClient) Create(args CreateArgs, reply *CreateReply) error {
 	return c.doCall("SgxRpcServer.Create", args, reply)
 }
 
-func (c *sgxRpcClient) Commit(args CommitArgs, reply *CommitReply) error {
+func (c *sgxRPCClient) Commit(args CommitArgs, reply *CommitReply) error {
 	return c.doCall("SgxRpcServer.Commit", args, reply)
 }
 
-func (c *sgxRpcClient) StateDBAddBalance(args StateDBAddBalanceArgs, reply *StateDBAddBalanceReply) error {
+func (c *sgxRPCClient) StateDBAddBalance(args StateDBAddBalanceArgs, reply *StateDBAddBalanceReply) error {
 	return c.doCall("SgxRpcServer.StateDBAddBalance", args, reply)
 }
 
-func (c *sgxRpcClient) StateDBSubBalance(args StateDBSubBalanceArgs, reply *StateDBSubBalanceReply) error {
+func (c *sgxRPCClient) StateDBSubBalance(args StateDBSubBalanceArgs, reply *StateDBSubBalanceReply) error {
 	return c.doCall("SgxRpcServer.StateDBSubBalance", args, reply)
 }
 
-func (c *sgxRpcClient) StateDBSetNonce(args StateDBSetNonceArgs, reply *StateDBSetNonceReply) error {
+func (c *sgxRPCClient) StateDBSetNonce(args StateDBSetNonceArgs, reply *StateDBSetNonceReply) error {
 	return c.doCall("SgxRpcServer.StateDBSetNonce", args, reply)
 }
 
-func (c *sgxRpcClient) StateDBIncreaseNonce(args StateDBIncreaseNonceArgs, reply *StateDBIncreaseNonceReply) error {
+func (c *sgxRPCClient) StateDBIncreaseNonce(args StateDBIncreaseNonceArgs, reply *StateDBIncreaseNonceReply) error {
 	return c.doCall("SgxRpcServer.StateDBIncreaseNonce", args, reply)
 }
 
-func (c *sgxRpcClient) StateDBPrepare(args StateDBPrepareArgs, reply *StateDBPrepareReply) error {
+func (c *sgxRPCClient) StateDBPrepare(args StateDBPrepareArgs, reply *StateDBPrepareReply) error {
 	return c.doCall("SgxRpcServer.StateDBPrepare", args, reply)
 }
 
-func (c *sgxRpcClient) StateDBGetRefund(args StateDBGetRefundArgs, reply *StateDBGetRefundReply) error {
+func (c *sgxRPCClient) StateDBGetRefund(args StateDBGetRefundArgs, reply *StateDBGetRefundReply) error {
 	return c.doCall("SgxRpcServer.StateDBGetRefund", args, reply)
 }
 
-func (c *sgxRpcClient) StateDBGetLogs(args StateDBGetLogsArgs, reply *StateDBGetLogsReply) error {
+func (c *sgxRPCClient) StateDBGetLogs(args StateDBGetLogsArgs, reply *StateDBGetLogsReply) error {
 	return c.doCall("SgxRpcServer.StateDBGetLogs", args, reply)
 }
 
