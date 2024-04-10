@@ -29,7 +29,6 @@ import (
 	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	ethermint "github.com/evmos/ethermint/types"
-	"github.com/evmos/ethermint/x/evm/statedb"
 	"github.com/evmos/ethermint/x/evm/types"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -301,13 +300,6 @@ func (k *Keeper) ApplyMessageWithConfig(
 		return nil, errorsmod.Wrap(types.ErrCallDisabled, "failed to call contract")
 	}
 
-	stateDB := statedb.NewWithParams(ctx, k, cfg.TxConfig, cfg.Params.EvmDenom)
-	if cfg.Overrides != nil {
-		if err := cfg.Overrides.Apply(stateDB); err != nil {
-			return nil, errorsmod.Wrap(err, "failed to apply state override")
-		}
-	}
-
 	sgxRpcClient, err := newSgxRpcClient(k.Logger(ctx))
 	if err != nil {
 		return nil, errorsmod.Wrap(err, "failed to create new SGX rpc client")
@@ -325,13 +317,30 @@ func (k *Keeper) ApplyMessageWithConfig(
 	if vmCfg.Tracer != nil {
 		if cfg.DebugTrace {
 			// msg.GasPrice should have been set to effective gas price
-			stateDB.SubBalance(sender.Address(), new(big.Int).Mul(msg.GasPrice, new(big.Int).SetUint64(msg.GasLimit)))
-			stateDB.SetNonce(sender.Address(), stateDB.GetNonce(sender.Address())+1)
+			// stateDB.SubBalance(sender.Address(), new(big.Int).Mul(msg.GasPrice, new(big.Int).SetUint64(msg.GasLimit)))
+			var reply StateDBSubBalanceReply
+			sgxRpcClient.StateDBSubBalance(StateDBSubBalanceArgs{
+				Caller: sender,
+				Msg:    msg,
+			}, &reply)
+
+			// stateDB.SetNonce(sender.Address(), stateDB.GetNonce(sender.Address())+1)
+			var replyNonce StateDBIncreaseNonceReply
+			sgxRpcClient.StateDBIncreaseNonce(StateDBIncreaseNonceArgs{
+				Caller: sender,
+				Msg:    msg,
+			}, &replyNonce)
 		}
 		vmCfg.Tracer.CaptureTxStart(leftoverGas)
 		defer func() {
 			if cfg.DebugTrace {
-				stateDB.AddBalance(sender.Address(), new(big.Int).Mul(msg.GasPrice, new(big.Int).SetUint64(leftoverGas)))
+				// stateDB.AddBalance(sender.Address(), new(big.Int).Mul(msg.GasPrice, new(big.Int).SetUint64(leftoverGas)))
+				var reply StateDBAddBalanceReply
+				sgxRpcClient.StateDBAddBalance(StateDBAddBalanceArgs{
+					Caller:      sender,
+					Msg:         msg,
+					LeftoverGas: leftoverGas,
+				}, &reply)
 			}
 			vmCfg.Tracer.CaptureTxEnd(leftoverGas)
 		}()
@@ -364,13 +373,23 @@ func (k *Keeper) ApplyMessageWithConfig(
 	// Execute the preparatory steps for state transition which includes:
 	// - prepare accessList(post-berlin)
 	// - reset transient storage(eip 1153)
-	stateDB.Prepare(rules, msg.From, cfg.CoinBase, msg.To, vm.ActivePrecompiles(rules), msg.AccessList)
+	// stateDB.Prepare(rules, msg.From, cfg.CoinBase, msg.To, vm.ActivePrecompiles(rules), msg.AccessList)
+	var replyPrepare StateDBPrepareReply
+	sgxRpcClient.StateDBPrepare(StateDBPrepareArgs{
+		Msg:   msg,
+		Rules: rules,
+	}, &replyPrepare)
 
 	if contractCreation {
 		// take over the nonce management from evm:
 		// - reset sender's nonce to msg.Nonce() before calling evm.
 		// - increase sender's nonce by one no matter the result.
-		stateDB.SetNonce(sender.Address(), msg.Nonce)
+		// stateDB.SetNonce(sender.Address(), msg.Nonce)
+		var replyNonce StateDBSetNonceReply
+		sgxRpcClient.StateDBSetNonce(StateDBSetNonceArgs{
+			Caller: sender,
+			Nonce:  msg.Nonce,
+		}, &replyNonce)
 
 		var reply CreateReply
 		vmErr = sgxRpcClient.Create(CreateArgs{
@@ -382,7 +401,11 @@ func (k *Keeper) ApplyMessageWithConfig(
 		ret = reply.Ret
 		leftoverGas = reply.LeftOverGas
 
-		stateDB.SetNonce(sender.Address(), msg.Nonce+1)
+		// stateDB.SetNonce(sender.Address(), msg.Nonce+1)
+		sgxRpcClient.StateDBSetNonce(StateDBSetNonceArgs{
+			Caller: sender,
+			Nonce:  msg.Nonce + 1,
+		}, &replyNonce)
 	} else {
 		var reply CallReply
 		vmErr = sgxRpcClient.Call(CallArgs{
@@ -407,9 +430,15 @@ func (k *Keeper) ApplyMessageWithConfig(
 	if msg.GasLimit < leftoverGas {
 		return nil, errorsmod.Wrap(types.ErrGasOverflow, "apply message")
 	}
+
 	// refund gas
 	temporaryGasUsed := msg.GasLimit - leftoverGas
-	leftoverGas += GasToRefund(stateDB.GetRefund(), temporaryGasUsed, refundQuotient)
+
+	var replyRefund StateDBGetRefundReply
+	sgxRpcClient.StateDBGetRefund(StateDBGetRefundArgs{}, &replyRefund)
+
+	refund := replyRefund.Refund
+	leftoverGas += GasToRefund(refund, temporaryGasUsed, refundQuotient)
 
 	// EVM execution error needs to be available for the JSON-RPC client
 	var vmError string
@@ -419,9 +448,18 @@ func (k *Keeper) ApplyMessageWithConfig(
 
 	// The dirty states in `StateDB` is either committed or discarded after return
 	if commit {
-		if err := stateDB.Commit(); err != nil {
-			return nil, errorsmod.Wrap(err, "failed to commit stateDB")
+		var reply CommitReply
+		vmErr = sgxRpcClient.Commit(CommitArgs{
+			Commit: true,
+		}, &reply)
+
+		if vmErr != nil {
+			return nil, errorsmod.Wrap(err, "failed to commit sgx stateDB")
 		}
+
+		// if err := stateDB.Commit(); err != nil {
+		// 	return nil, errorsmod.Wrap(err, "failed to commit stateDB")
+		// }
 	}
 
 	// calculate a minimum amount of gas to be charged to sender if GasLimit
@@ -443,11 +481,14 @@ func (k *Keeper) ApplyMessageWithConfig(
 	// reset leftoverGas, to be used by the tracer
 	leftoverGas = msg.GasLimit - gasUsed
 
+	var replyLog StateDBGetLogsReply
+	sgxRpcClient.StateDBGetLogs(StateDBGetLogsArgs{}, &replyLog)
+
 	return &types.MsgEthereumTxResponse{
 		GasUsed:   gasUsed,
 		VmError:   vmError,
 		Ret:       ret,
-		Logs:      types.NewLogsFromEth(stateDB.Logs()),
+		Logs:      types.NewLogsFromEth(replyLog.Logs),
 		Hash:      cfg.TxConfig.TxHash.Hex(),
 		BlockHash: ctx.HeaderHash(),
 	}, nil
@@ -482,6 +523,7 @@ func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConf
 			DebugTrace:      cfg.DebugTrace,
 			NoBaseFee:       cfg.FeeMarketParams.NoBaseFee,
 			EvmDenom:        cfg.Params.EvmDenom,
+			Overrides:       ToGOB64(cfg.Overrides),
 		},
 	}
 

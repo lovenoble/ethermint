@@ -9,7 +9,9 @@ import (
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/evmos/ethermint/x/evm/statedb"
 )
 
@@ -51,6 +53,38 @@ func (c *sgxRpcClient) Create(args CreateArgs, reply *CreateReply) error {
 	return c.doCall("SgxRpcServer.Create", args, reply)
 }
 
+func (c *sgxRpcClient) Commit(args CommitArgs, reply *CommitReply) error {
+	return c.doCall("SgxRpcServer.Commit", args, reply)
+}
+
+func (c *sgxRpcClient) StateDBAddBalance(args StateDBAddBalanceArgs, reply *StateDBAddBalanceReply) error {
+	return c.doCall("SgxRpcServer.StateDBAddBalance", args, reply)
+}
+
+func (c *sgxRpcClient) StateDBSubBalance(args StateDBSubBalanceArgs, reply *StateDBSubBalanceReply) error {
+	return c.doCall("SgxRpcServer.StateDBSubBalance", args, reply)
+}
+
+func (c *sgxRpcClient) StateDBSetNonce(args StateDBSetNonceArgs, reply *StateDBSetNonceReply) error {
+	return c.doCall("SgxRpcServer.StateDBSetNonce", args, reply)
+}
+
+func (c *sgxRpcClient) StateDBIncreaseNonce(args StateDBIncreaseNonceArgs, reply *StateDBIncreaseNonceReply) error {
+	return c.doCall("SgxRpcServer.StateDBIncreaseNonce", args, reply)
+}
+
+func (c *sgxRpcClient) StateDBPrepare(args StateDBPrepareArgs, reply *StateDBPrepareReply) error {
+	return c.doCall("SgxRpcServer.StateDBPrepare", args, reply)
+}
+
+func (c *sgxRpcClient) StateDBGetRefund(args StateDBGetRefundArgs, reply *StateDBGetRefundReply) error {
+	return c.doCall("SgxRpcServer.StateDBGetRefund", args, reply)
+}
+
+func (c *sgxRpcClient) StateDBGetLogs(args StateDBGetLogsArgs, reply *StateDBGetLogsReply) error {
+	return c.doCall("SgxRpcServer.StateDBGetLogs", args, reply)
+}
+
 // PrepareTxEVMConfig only contains the fields from EVMConfig that are needed
 // to create a new EVM instance. This is used to pass the EVM configuration
 // over RPC to the SGX binary.
@@ -73,6 +107,8 @@ type PrepareTxEVMConfig struct {
 	// Fields from EVMConfig.Params struct
 	EvmDenom  string
 	ExtraEips []int
+	// *rpctypes.StateOverride : original type
+	Overrides string
 }
 
 // PrepareTxArgs is the argument struct for the SgxRpcServer.PrepareTx RPC method.
@@ -119,4 +155,76 @@ type CreateReply struct {
 	Ret          []byte
 	ContractAddr common.Address
 	LeftOverGas  uint64
+}
+
+// CommitArgs is the argument struct for the SgxRpcServer.Commit RPC method.
+type CommitArgs struct {
+	Commit bool
+}
+
+// CommitReply is the reply struct for the SgxRpcServer.Commit RPC method.
+type CommitReply struct {
+}
+
+// CommitArgs is the argument struct for the SgxRpcServer.StateDBSubBalance RPC method.
+type StateDBSubBalanceArgs struct {
+	Caller vm.AccountRef
+	Msg    core.Message
+}
+
+// CommitReply is the reply struct for the SgxRpcServer.StateDBSubBalance RPC method.
+type StateDBSubBalanceReply struct {
+}
+
+// CommitArgs is the argument struct for the SgxRpcServer.StateDSetNonce RPC method.
+type StateDBSetNonceArgs struct {
+	Caller vm.AccountRef
+	Nonce  uint64
+}
+
+// CommitReply is the reply struct for the SgxRpcServer.StateDSetNonce RPC method.
+type StateDBSetNonceReply struct {
+}
+
+// StateDBAddBalanceArgs is the argument struct for the SgxRpcServer.StateDBAddBalance RPC method.
+type StateDBAddBalanceArgs struct {
+	Caller      vm.AccountRef
+	Msg         core.Message
+	LeftoverGas uint64
+}
+
+// StateDBAddBalanceReply is the reply struct for the SgxRpcServer.StateDBAddBalance RPC method.
+type StateDBAddBalanceReply struct {
+}
+
+type StateDBPrepareArgs struct {
+	Msg   core.Message
+	Rules params.Rules
+}
+
+type StateDBPrepareReply struct {
+}
+
+// StateDBIncreaseNonceArgs is the argument struct for the SgxRpcServer.StateDBIncreaseNonce RPC method.
+type StateDBIncreaseNonceArgs struct {
+	Caller vm.AccountRef
+	Msg    core.Message
+}
+
+// StateDBIncreaseNonceReply is the reply struct for the SgxRpcServer.StateDBIncreaseNonce RPC method.
+type StateDBIncreaseNonceReply struct {
+}
+
+type StateDBGetRefundArgs struct {
+}
+
+type StateDBGetRefundReply struct {
+	Refund uint64
+}
+
+type StateDBGetLogsArgs struct {
+}
+
+type StateDBGetLogsReply struct {
+	Logs []*ethtypes.Log
 }
