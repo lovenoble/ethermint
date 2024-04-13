@@ -41,6 +41,7 @@ import (
 
 	rpctypes "github.com/evmos/ethermint/rpc/types"
 	ethermint "github.com/evmos/ethermint/types"
+	"github.com/evmos/ethermint/x/evm/statedb"
 	"github.com/evmos/ethermint/x/evm/types"
 )
 
@@ -753,4 +754,152 @@ func getChainID(ctx sdk.Context, chainID int64) (*big.Int, error) {
 		return ethermint.ParseChainID(ctx.ChainID())
 	}
 	return big.NewInt(chainID), nil
+}
+
+// ------------------------------
+// StateDB queries for SGX party
+// ------------------------------
+
+// QueryGetHashStateDB queries hash in statedb for sgx
+func (k Keeper) QueryGetHashStateDB(c context.Context, req *types.GetHashRequest) (*types.GetHashResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+	hash := k.GetHashFn(ctx)(req.Height)
+
+	res := &types.GetHashResponse{
+		Hash: hash.Hex(),
+	}
+
+	return res, nil
+}
+
+// PostAddBalanceStateDB add balance in statedb for sgx
+func (k Keeper) PostAddBalanceStateDB(c context.Context, req *types.AddBalanceRequest) (*types.AddBalanceResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+	addr, err := sdk.AccAddressFromBech32(req.Addr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = k.AddBalance(ctx, addr, req.Amount)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.AddBalanceResponse{}, nil
+}
+
+// PostSubBalanceStateDB sub balance in statedb for sgx
+func (k Keeper) PostSubBalanceStateDB(c context.Context, req *types.SubBalanceRequest) (*types.SubBalanceResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+	addr, err := sdk.AccAddressFromBech32(req.Addr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = k.SubBalance(ctx, addr, req.Amount)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.SubBalanceResponse{}, nil
+}
+
+// QueryGetBalanceStateDB queries balance in statedb for sgx
+func (k Keeper) QueryGetBalanceStateDB(c context.Context, req *types.GetBalanceRequest) (*types.GetBalanceResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+	addr, err := sdk.AccAddressFromBech32(req.Addr)
+	if err != nil {
+		return nil, err
+	}
+
+	balance := k.GetBalance(ctx, addr, req.Denom)
+
+	return &types.GetBalanceResponse{
+		Balance: sdkmath.NewIntFromBigInt(balance),
+	}, nil
+}
+
+// QueryGetAccountStateDB queries account in statedb for sgx
+func (k Keeper) QueryGetAccountStateDB(c context.Context, req *types.GetAccountRequest) (*types.GetAccountResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+	addr := common.HexToAddress(req.Addr)
+	account := k.GetAccount(ctx, addr)
+
+	res, err := json.Marshal(account)
+	if err != nil {
+		return nil, err
+	}
+
+	return &types.GetAccountResponse{
+		Account: res,
+	}, nil
+}
+
+// QueryGetStateStateDB queries state in statedb for sgx
+func (k Keeper) QueryGetStateStateDB(c context.Context, req *types.GetStateRequest) (*types.GetStateResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+	addr := common.HexToAddress(req.Addr)
+	key := common.HexToHash(req.Key)
+
+	hash := k.GetState(ctx, addr, key)
+	return &types.GetStateResponse{
+		Hash: hash.Hex(),
+	}, nil
+}
+
+// QueryGetCodeStateDB queries code in statedb for sgx
+func (k Keeper) QueryGetCodeStateDB(c context.Context, req *types.GetCodeRequest) (*types.GetCodeResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+	codeHash := common.HexToHash(req.CodeHash)
+
+	code := k.GetCode(ctx, codeHash)
+	return &types.GetCodeResponse{
+		Code: code,
+	}, nil
+}
+
+// PostSetAccountStateDB sets account in statedb for sgx
+func (k Keeper) PostSetAccountStateDB(c context.Context, req *types.SetAccountRequest) (*types.SetAccountResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+	addr := common.HexToAddress(req.Addr)
+
+	var account statedb.Account
+	err := json.Unmarshal(req.Account, &account)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	err = k.SetAccount(ctx, addr, account)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	return &types.SetAccountResponse{}, nil
+}
+
+// PostSetStateStateDB sets state in statedb for sgx
+func (k Keeper) PostSetStateStateDB(c context.Context, req *types.SetStateRequest) (*types.SetStateResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+	addr := common.HexToAddress(req.Addr)
+	key := common.HexToHash(req.Key)
+
+	k.SetState(ctx, addr, key, req.Value)
+	return &types.SetStateResponse{}, nil
+}
+
+// PostSetCodeStateDB sets code in statedb for sgx
+func (k Keeper) PostSetCodeStateDB(c context.Context, req *types.SetCodeRequest) (*types.SetCodeResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+
+	k.SetCode(ctx, req.CodeHash, req.Code)
+	return &types.SetCodeResponse{}, nil
+}
+
+// PostDeleteAccountStateDB delete account in statedb for sgx
+func (k Keeper) PostDeleteAccountStateDB(c context.Context, req *types.DeleteAccountRequest) (*types.DeleteAccountResponse, error) {
+	ctx := sdk.UnwrapSDKContext(c)
+	addr := common.HexToAddress(req.Addr)
+
+	k.DeleteAccount(ctx, addr)
+	return &types.DeleteAccountResponse{}, nil
 }

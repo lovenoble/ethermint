@@ -2,6 +2,7 @@ syntax = "proto3";
 package ethermint.evm.v1;
 
 import "cosmos/base/query/v1beta1/pagination.proto";
+import "cosmos/base/v1beta1/coin.proto";
 import "ethermint/evm/v1/tx.proto";
 import "ethermint/evm/v1/log.proto";
 import "ethermint/evm/v1/params.proto";
@@ -80,6 +81,52 @@ service Query {
   // it's similar to feemarket module's method, but also checks london hardfork status.
   rpc BaseFee(QueryBaseFeeRequest) returns (QueryBaseFeeResponse) {
     option (google.api.http).get = "/ethermint/evm/v1/base_fee";
+  }
+
+  // -----------------------------------------
+  // Query clients for evm keeper statedb access
+  rpc QueryGetHashStateDB(GetHashRequest) returns (GetHashResponse) {
+    option (google.api.http).get = "/ethermint/evm/v1/get_hash";
+  }
+  
+  rpc PostAddBalanceStateDB(AddBalanceRequest) returns (AddBalanceResponse) {
+    option (google.api.http).post = "/ethermint/evm/v1/add_balance";
+  }
+  
+  rpc PostSubBalanceStateDB(SubBalanceRequest) returns (SubBalanceResponse) {
+    option (google.api.http).post = "/ethermint/evm/v1/sub_balance";
+  }
+
+  rpc QueryGetBalanceStateDB(GetBalanceRequest) returns (GetBalanceResponse) {
+    option (google.api.http).get = "/ethermint/evm/v1/get_balance";
+  }
+
+  rpc QueryGetAccountStateDB(GetAccountRequest) returns (GetAccountResponse) {
+    option (google.api.http).get = "/ethermint/evm/v1/get_account";
+  }
+
+  rpc QueryGetStateStateDB(GetStateRequest) returns (GetStateResponse) {
+    option (google.api.http).get = "/ethermint/evm/v1/get_state";
+  }
+
+  rpc QueryGetCodeStateDB(GetCodeRequest) returns (GetCodeResponse) {
+    option (google.api.http).get = "/ethermint/evm/v1/get_code";
+  }
+
+  rpc PostSetAccountStateDB(SetAccountRequest) returns (SetAccountResponse) {
+    option (google.api.http).post = "/ethermint/evm/v1/set_account";
+  }
+
+  rpc PostSetStateStateDB(SetStateRequest) returns (SetStateResponse) {
+    option (google.api.http).post = "/ethermint/evm/v1/set_state";
+  }
+
+  rpc PostSetCodeStateDB(SetCodeRequest) returns (SetCodeResponse) {
+    option (google.api.http).post = "/ethermint/evm/v1/set_code";
+  }
+
+  rpc PostDeleteAccountStateDB(DeleteAccountRequest) returns (DeleteAccountResponse) {
+    option (google.api.http).post = "/ethermint/evm/v1/delete_account";
   }
 }
 
@@ -335,4 +382,118 @@ message QueryBaseFeeRequest {}
 message QueryBaseFeeResponse {
   // base_fee is the EIP1559 base fee
   string base_fee = 1 [(gogoproto.customtype) = "cosmossdk.io/math.Int"];
+}
+
+message GetHashRequest {
+  uint64 height = 1;
+}
+
+message GetHashResponse {
+  // hash *common.Hash
+  string hash = 1;
+}
+
+message AddBalanceRequest {
+  // Addr   sdk.AccAddress
+  string addr      = 1;
+	// Amount sdk.Coins
+  repeated cosmos.base.v1beta1.Coin amount = 2 [(gogoproto.nullable) = false] ;
+}
+
+message AddBalanceResponse {
+}
+
+message SubBalanceRequest {
+  // Addr   sdk.AccAddress
+  string addr      = 1;
+	// Amount sdk.Coins
+  repeated cosmos.base.v1beta1.Coin amount = 2 [(gogoproto.nullable) = false] ;
+}
+
+message SubBalanceResponse {
+}
+
+message GetBalanceRequest {
+  // Addr  sdk.AccAddress
+  string addr      = 1;
+	// Denom string
+  string denom     = 2;
+}
+
+message GetBalanceResponse {
+  //	Balance *big.Int
+  string balance = 1 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false];
+}
+
+message GetAccountRequest {
+	// Addr common.Address
+  string addr      = 1;
+}
+
+message GetAccountResponse {
+  // accutal type is *statedb.Account
+	// Account *statedb.Account
+	bytes account = 1;
+}
+
+message GetStateRequest {
+  // Addr common.Address
+  string addr     = 1;
+	// Key  common.Hash
+  string key      = 2;
+}
+
+message GetStateResponse {
+	// Hash common.Hash
+  string hash = 1;
+}
+
+message GetCodeRequest {
+	// CodeHash common.Hash
+  string code_hash = 1;
+}
+
+message GetCodeResponse {
+	// Code []byte
+	bytes code = 1;
+}
+
+message SetAccountRequest {
+  // Addr    common.Address
+  string addr = 1;
+	// Account statedb.Account
+  bytes account = 2;
+}
+
+message SetAccountResponse {
+}
+
+message SetStateRequest {
+  // Addr    common.Address
+  string addr = 1;
+	// Key   common.Hash
+  string key = 2;
+  // Value []byte
+  bytes value = 3;
+}
+
+message SetStateResponse {
+}
+
+message SetCodeRequest {
+	// CodeHash []byte
+  bytes code_hash = 1;
+	// Code     []byte
+  bytes code = 2;
+}
+
+message SetCodeResponse {
+}
+
+message DeleteAccountRequest {
+  // Addr common.Address
+  string addr = 1;
+}
+
+message DeleteAccountResponse {
 }
