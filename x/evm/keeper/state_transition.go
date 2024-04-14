@@ -19,9 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"net"
-	"net/http"
-	"net/rpc"
 
 	cmttypes "github.com/cometbft/cometbft/types"
 
@@ -537,13 +534,7 @@ func (k *Keeper) ApplyMessageWithConfig(
 //   - sends a "PrepareTx" request to the SGX enclave with the relevant tx and
 //     block info
 func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConfig, sgxRPCClient *sgxRPCClient) error {
-	// Step 1. Create an RPC server to receive requests from the SGX enclave.
-	err := k.runRPCServer(ctx, msg, cfg)
-	if err != nil {
-		return err
-	}
-
-	// Step 2. Send a "PrepareTx" request to the SGX enclave.
+	// Step 1. Send a "PrepareTx" request to the SGX enclave.
 	ChainConfigJson, err := json.Marshal(cfg.ChainConfig)
 	if err != nil {
 		return err
@@ -565,31 +556,4 @@ func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConf
 	}
 
 	return sgxRPCClient.PrepareTx(args, &PrepareTxReply{})
-}
-
-func (k *Keeper) runRPCServer(ctx sdk.Context, msg core.Message, cfg *EVMConfig) error {
-	defer func() {
-		if r := recover(); r != nil {
-			ctx.Logger().Debug("recovered from panic", "error", r)
-		}
-	}()
-
-	// TODO Think about whether the RPC server should be persistent or ephemeral
-	//  - If it's persistent, we need to handle the lifecycle of the RPC server
-	//  - If it's ephemeral, we need to create a new RPC server for each message
-	//  The current implementation is ephemeral.
-	srv := &EthmRpcServer{k: k, ctx: ctx, msg: msg, evmCfg: cfg}
-	rpc.Register(srv)
-	rpc.HandleHTTP()
-
-	// TODO handle port customization
-	l, err := net.Listen("tcp", ":9093")
-	if err != nil {
-		// TODO handle error
-		panic(err)
-	}
-	// TODO Handle shutdown
-	go http.Serve(l, nil)
-
-	return nil
 }
