@@ -874,7 +874,7 @@ func (k Keeper) PostSetAccountStateDB(c context.Context, req *types.SetAccountRe
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	return &types.SetAccountResponse{}, nil
+	return &types.SetAccountResponse{Nonce: account.Nonce, CodeHash: account.CodeHash}, nil
 }
 
 // PostSetStateStateDB sets state in statedb for sgx

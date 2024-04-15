@@ -466,6 +466,8 @@ message SetAccountRequest {
 }
 
 message SetAccountResponse {
+  uint64 Nonce = 1;
+	bytes CodeHash = 2;
 }
 
 message SetStateRequest {
