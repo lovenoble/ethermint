@@ -539,6 +539,15 @@ func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConf
 	if err != nil {
 		return err
 	}
+
+	var overrides []byte
+	if cfg.Overrides != nil {
+		overrides, err = json.Marshal(cfg.Overrides)
+		if err != nil {
+			return err
+		}
+	}
+
 	ctx.HeaderHash()
 	args := PrepareTxArgs{
 		Header: ctx.BlockHeader(),
@@ -551,7 +560,7 @@ func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConf
 			DebugTrace:      cfg.DebugTrace,
 			NoBaseFee:       cfg.FeeMarketParams.NoBaseFee,
 			EvmDenom:        cfg.Params.EvmDenom,
-			Overrides:       ToGOB64(cfg.Overrides),
+			Overrides:       overrides,
 		},
 	}
 

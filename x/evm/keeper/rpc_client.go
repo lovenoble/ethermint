@@ -108,7 +108,7 @@ type PrepareTxEVMConfig struct {
 	EvmDenom  string
 	ExtraEips []int
 	// *rpctypes.StateOverride : original type
-	Overrides string
+	Overrides []byte
 }
 
 // PrepareTxArgs is the argument struct for the SgxRpcServer.PrepareTx RPC method.
