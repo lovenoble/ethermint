@@ -78,6 +78,9 @@ type Keeper struct {
 	// a set of store keys that should cover all the precompile use cases,
 	// or ideally just pass the application's all stores.
 	keys map[string]storetypes.StoreKey
+
+	// ctx stored at the time of prepare SGX call
+	preparedCtx sdk.Context
 }
 
 // NewKeeper generates new evm module keeper

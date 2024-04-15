@@ -555,5 +555,8 @@ func (k *Keeper) prepareTxForSgx(ctx sdk.Context, msg core.Message, cfg *EVMConf
 		},
 	}
 
+	// Snapshot the ctx
+	k.preparedCtx = ctx
+
 	return sgxRPCClient.PrepareTx(args, &PrepareTxReply{})
 }
